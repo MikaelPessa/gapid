@@ -95,6 +95,7 @@ func (n *StateTreeNode) Path() *Any             { return &Any{Path: &Any_StateTr
 func (n *StateTreeNodeForPath) Path() *Any      { return &Any{Path: &Any_StateTreeNodeForPath{n}} }
 func (n *Stats) Path() *Any                     { return &Any{Path: &Any_Stats{n}} }
 func (n *Thumbnail) Path() *Any                 { return &Any{Path: &Any_Thumbnail{n}} }
+func (n *Perfetto) Path() *Any                  { return &Any{Path: &Any_Perfetto{n}} }
 
 func (n API) Parent() Node                       { return nil }
 func (n ArrayIndex) Parent() Node                { return oneOfNode(n.Array) }
@@ -134,6 +135,7 @@ func (n StateTreeNode) Parent() Node             { return nil }
 func (n StateTreeNodeForPath) Parent() Node      { return nil }
 func (n Stats) Parent() Node                     { return n.Capture }
 func (n Thumbnail) Parent() Node                 { return oneOfNode(n.Object) }
+func (n Perfetto) Parent() Node                  { return n.Capture }
 
 func (n *API) SetParent(p Node)                       {}
 func (n *Blob) SetParent(p Node)                      {}
@@ -166,6 +168,7 @@ func (n *StateTree) SetParent(p Node)                 { n.State, _ = p.(*State) 
 func (n *StateTreeNode) SetParent(p Node)             {}
 func (n *StateTreeNodeForPath) SetParent(p Node)      {}
 func (n *Stats) SetParent(p Node)                     { n.Capture, _ = p.(*Capture) }
+func (n *Perfetto) SetParent(p Node)                  { n.Capture, _ = p.(*Capture) }
 
 // Format implements fmt.Formatter to print the path.
 func (n ArrayIndex) Format(f fmt.State, c rune) {

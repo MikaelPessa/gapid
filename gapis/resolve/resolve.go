@@ -354,6 +354,8 @@ func ResolveInternal(ctx context.Context, p path.Node, r *path.ResolveConfig) (i
 		return Thumbnail(ctx, p, r)
 	case *path.Stats:
 		return Stats(ctx, p, r)
+	case *path.Perfetto:
+		return Perfetto(ctx, p, r)
 	default:
 		return nil, fmt.Errorf("Unknown path type %T", p)
 	}

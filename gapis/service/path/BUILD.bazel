@@ -47,6 +47,7 @@ proto_library(
         "//core/image:image_proto",
         "//gapis/service/box:box_proto",
         "//gapis/vertex:vertex_proto",
+        "@perfetto//:config_combined_proto",
     ],
 )
 
@@ -60,6 +61,7 @@ go_proto_library(
         "//core/image:go_default_library",
         "//gapis/service/box:go_default_library",
         "//gapis/vertex:go_default_library",
+        "@perfetto//:config_go_proto",
     ],
 )
 
