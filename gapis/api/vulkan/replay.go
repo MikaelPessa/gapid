@@ -925,6 +925,8 @@ func (a API) Replay(
 		transforms.Add(wireframe(ctx))
 	}
 
+	transforms.Add(minimizeTextureSize(ctx))
+
 	if doDisplayToSurface {
 		transforms.Add(newDisplayToSurface())
 	}
