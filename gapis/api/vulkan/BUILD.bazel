@@ -73,6 +73,7 @@ go_library(
         "image_primer_store.go",
         "mem_binding_list.go",
         "memory_breakdown.go",
+        "set_vertex_count_to_one.go",
         "overdraw.go",
         "primeable_image_data.go",
         "query_timestamps.go",

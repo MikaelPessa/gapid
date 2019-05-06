@@ -925,6 +925,8 @@ func (a API) Replay(
 		transforms.Add(wireframe(ctx))
 	}
 
+	transforms.Add(setVertexCountToOne(ctx))
+
 	if doDisplayToSurface {
 		transforms.Add(newDisplayToSurface())
 	}
