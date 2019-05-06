@@ -925,6 +925,8 @@ func (a API) Replay(
 		transforms.Add(wireframe(ctx))
 	}
 
+	transforms.Add(simplifySampling(ctx))
+
 	if doDisplayToSurface {
 		transforms.Add(newDisplayToSurface())
 	}
