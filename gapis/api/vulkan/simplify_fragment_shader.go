@@ -81,7 +81,7 @@ func simplifyFragmentShader(ctx context.Context) transform.Transformer {
 
 		s := out.State()
 		l := s.MemoryLayout
-		//cb := CommandBuilder{Thread: cmd.Thread(), Arena: s.Arena}
+		cb := CommandBuilder{Thread: cmd.Thread(), Arena: s.Arena}
 		switch cmd := cmd.(type) {
 		case *VkCreateShaderModule:
 			oldCreateInfo := cmd.PCreateInfo().MustRead(ctx, cmd, s, nil)
@@ -89,23 +89,25 @@ func simplifyFragmentShader(ctx context.Context) transform.Transformer {
 			if isFragment {
 				shader := loadShader(constantColorShaderPath)
 				log.I(ctx, shader)
+				/*
+					createInfo := NewVkShaderModuleCreateInfo(
+						s.Arena,
+						oldCreateInfo.SType(),    // sType
+						oldCreateInfo.PNext(),    // pNext
+						oldCreateInfo.Flags(),    // flags
+						oldCreateInfo.CodeSize(), // codeSize
+						oldCreateInfo.PCode(),    // pCode
+					)
+				*/
+				createInfoData := s.AllocDataOrPanic(ctx, oldCreateInfo)
+				defer createInfoData.Free()
 
-				createInfo := NewVkShaderModuleCreateInfo(
-					s.Arena,
-					oldCreateInfo.SType(),    // sType
-					oldCreateInfo.PNext(),    // pNext
-					oldCreateInfo.Flags(),    // flags
-					oldCreateInfo.CodeSize(), // codeSize
-					oldCreateInfo.PCode(),    // pCode
-				)
-
-				createInfoData := s.AllocDataOrPanic(ctx, createInfo)
-
-				newCmd := VkCreateShaderModule(
+				newCmd := cb.VkCreateShaderModule(
 					cmd.Device(),
 					createInfoData.Ptr(),
 					cmd.PAllocator(),
 					cmd.PShaderModule(),
+					VkResult_VK_SUCCESS,
 				).AddRead(createInfoData.Data())
 
 				out.MutateAndWrite(ctx, id, newCmd)
