@@ -73,6 +73,7 @@ go_library(
         "image_primer_store.go",
         "mem_binding_list.go",
         "memory_breakdown.go",
+        "minimize_viewport.go",
         "overdraw.go",
         "primeable_image_data.go",
         "query_timestamps.go",

@@ -925,6 +925,9 @@ func (a API) Replay(
 		transforms.Add(wireframe(ctx))
 	}
 
+	// Change viewport to 1x1
+	transforms.Add(minimizeViewport(ctx))
+
 	if doDisplayToSurface {
 		transforms.Add(newDisplayToSurface())
 	}
