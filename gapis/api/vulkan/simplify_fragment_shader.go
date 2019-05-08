@@ -23,12 +23,13 @@ import (
 	"github.com/google/gapid/core/os/device"
 	"github.com/google/gapid/gapis/api"
 	"github.com/google/gapid/gapis/api/transform"
+	"github.com/google/gapid/gapis/memory"
 	"github.com/google/gapid/gapis/shadertools"
 )
 
 const opEntryPoint uint32 = 15
 const opFragmentExecutionMode uint32 = 4
-const constantColorShaderPath string = "/usr/local/google/home/mikaelpessa/work/gapid/gapis/shadertools/constant_color.frag"
+const constantColorShaderPath string = "/usr/local/google/home/mikaelpessa/work/gapid/gapis/shaders/constant_color.frag"
 
 func isFragmentShader(ctx context.Context, info VkShaderModuleCreateInfo, l *device.MemoryLayout, s *api.GlobalState) bool {
 	codeSize := uint64(info.CodeSize()) / 4
@@ -50,27 +51,25 @@ func isFragmentShader(ctx context.Context, info VkShaderModuleCreateInfo, l *dev
 	panic("No shader entry point found.")
 }
 
-func loadShader(shaderPath string) string {
-	codeBytes, err := ioutil.ReadFile(shaderPath)
+func loadShader(shaderPath string) []uint32 {
+	sourceBytes, err := ioutil.ReadFile(shaderPath)
 	if err != nil {
 		fmt.Print(err)
 		panic(err)
 	}
 
-	opts := shadertools.ConvertOptions{
-		ShaderType:        shadertools.TypeFragment,
-		MakeDebuggable:    false,
-		CheckAfterChanges: true,
-		Disassemble:       true,
+	opts := shadertools.CompileOptions{
+		ShaderType: shadertools.TypeFragment,
+		ClientType: shadertools.Vulkan,
 	}
 
-	res, err := shadertools.ConvertGlsl(string(codeBytes), &opts)
+	compiledBytes, err := shadertools.CompileGlsl(string(sourceBytes), opts)
 	if err != nil {
 		fmt.Print(err)
 		panic(err)
 	}
 
-	return res.SourceCode
+	return compiledBytes
 }
 
 // replaces all fragment shaders with a constant color shader
@@ -85,21 +84,22 @@ func simplifyFragmentShader(ctx context.Context) transform.Transformer {
 		switch cmd := cmd.(type) {
 		case *VkCreateShaderModule:
 			oldCreateInfo := cmd.PCreateInfo().MustRead(ctx, cmd, s, nil)
-			isFragment := isFragmentShader(ctx, oldCreateInfo, l, s)
-			if isFragment {
-				shader := loadShader(constantColorShaderPath)
-				log.I(ctx, shader)
-				/*
-					createInfo := NewVkShaderModuleCreateInfo(
-						s.Arena,
-						oldCreateInfo.SType(),    // sType
-						oldCreateInfo.PNext(),    // pNext
-						oldCreateInfo.Flags(),    // flags
-						oldCreateInfo.CodeSize(), // codeSize
-						oldCreateInfo.PCode(),    // pCode
-					)
-				*/
-				createInfoData := s.AllocDataOrPanic(ctx, oldCreateInfo)
+			if isFragmentShader(ctx, oldCreateInfo, l, s) {
+				cmd.Extras().Observations().ApplyReads(s.Memory.ApplicationPool())
+
+				shaderSource := loadShader(constantColorShaderPath)
+				shaderData := s.AllocDataOrPanic(ctx, shaderSource)
+				defer shaderData.Free()
+
+				createInfo := NewVkShaderModuleCreateInfo(
+					s.Arena,
+					oldCreateInfo.SType(),            // sType
+					oldCreateInfo.PNext(),            // pNext
+					oldCreateInfo.Flags(),            // flags
+					memory.Size(len(shaderSource)*4), // codeSize
+					NewU32ᶜᵖ(shaderData.Ptr()),       // pCode
+				)
+				createInfoData := s.AllocDataOrPanic(ctx, createInfo)
 				defer createInfoData.Free()
 
 				newCmd := cb.VkCreateShaderModule(
@@ -108,8 +108,15 @@ func simplifyFragmentShader(ctx context.Context) transform.Transformer {
 					cmd.PAllocator(),
 					cmd.PShaderModule(),
 					VkResult_VK_SUCCESS,
-				).AddRead(createInfoData.Data())
+				).AddRead(
+					createInfoData.Data(),
+				).AddRead(
+					shaderData.Data(),
+				)
 
+				for _, w := range cmd.Extras().Observations().Writes {
+					newCmd.AddWrite(w.Range, w.ID)
+				}
 				out.MutateAndWrite(ctx, id, newCmd)
 			} else {
 				out.MutateAndWrite(ctx, id, cmd)
