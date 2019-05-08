@@ -137,9 +137,6 @@ go_library(
         "//gapis/vertex:go_default_library",
         "@com_github_golang_protobuf//proto:go_default_library",
     ],
-    data = [
-      "//gapis/shaders:shader_files",
-    ],
 )
 
 proto_library(

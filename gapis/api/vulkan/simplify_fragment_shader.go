@@ -16,8 +16,6 @@ package vulkan
 
 import (
 	"context"
-	"fmt"
-	"io/ioutil"
 
 	"github.com/google/gapid/core/log"
 	"github.com/google/gapid/core/os/device"
@@ -29,7 +27,12 @@ import (
 
 const opEntryPoint uint32 = 15
 const opFragmentExecutionMode uint32 = 4
-const constantColorShaderPath string = "/usr/local/google/home/mikaelpessa/work/gapid/gapis/shaders/constant_color.frag"
+const constantColorShader string = `
+#version 330
+layout (location = 0) out vec4 fragColor;
+void main() {
+   fragColor = vec4(0, 0, 1, 1);
+}`
 
 func isFragmentShader(ctx context.Context, info VkShaderModuleCreateInfo, l *device.MemoryLayout, s *api.GlobalState) bool {
 	codeSize := uint64(info.CodeSize()) / 4
@@ -51,27 +54,6 @@ func isFragmentShader(ctx context.Context, info VkShaderModuleCreateInfo, l *dev
 	panic("No shader entry point found.")
 }
 
-func loadShader(shaderPath string) []uint32 {
-	sourceBytes, err := ioutil.ReadFile(shaderPath)
-	if err != nil {
-		fmt.Print(err)
-		panic(err)
-	}
-
-	opts := shadertools.CompileOptions{
-		ShaderType: shadertools.TypeFragment,
-		ClientType: shadertools.Vulkan,
-	}
-
-	compiledBytes, err := shadertools.CompileGlsl(string(sourceBytes), opts)
-	if err != nil {
-		fmt.Print(err)
-		panic(err)
-	}
-
-	return compiledBytes
-}
-
 // replaces all fragment shaders with a constant color shader
 func simplifyFragmentShader(ctx context.Context) transform.Transformer {
 	ctx = log.Enter(ctx, "simplifyFragmentShader")
@@ -85,14 +67,17 @@ func simplifyFragmentShader(ctx context.Context) transform.Transformer {
 		case *VkCreateShaderModule:
 			oldCreateInfo := cmd.PCreateInfo().MustRead(ctx, cmd, s, nil)
 			if isFragmentShader(ctx, oldCreateInfo, l, s) {
-				cmd.Extras().Observations().ApplyReads(s.Memory.ApplicationPool())
-
-				shaderSource := loadShader(constantColorShaderPath)
+				shaderSource, _ := shadertools.CompileGlsl(
+					constantColorShader,
+					shadertools.CompileOptions{
+						ShaderType: shadertools.TypeFragment,
+						ClientType: shadertools.Vulkan,
+					},
+				)
 				shaderData := s.AllocDataOrPanic(ctx, shaderSource)
 				defer shaderData.Free()
 
-				createInfo := NewVkShaderModuleCreateInfo(
-					s.Arena,
+				createInfo := NewVkShaderModuleCreateInfo(s.Arena,
 					oldCreateInfo.SType(),            // sType
 					oldCreateInfo.PNext(),            // pNext
 					oldCreateInfo.Flags(),            // flags
@@ -114,7 +99,7 @@ func simplifyFragmentShader(ctx context.Context) transform.Transformer {
 					shaderData.Data(),
 				)
 
-				for _, w := range cmd.Extras().Observations().Writes {
+				for _, w := range cmd.extras.Observations().Writes {
 					newCmd.AddWrite(w.Range, w.ID)
 				}
 				out.MutateAndWrite(ctx, id, newCmd)
