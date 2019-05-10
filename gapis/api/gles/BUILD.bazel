@@ -75,6 +75,7 @@ go_library(
         "links.go",
         "markers.go",
         "math.go",
+        "minimize_viewport.go",
         "read_depth.go",
         "read_framebuffer.go",
         "read_texture.go",

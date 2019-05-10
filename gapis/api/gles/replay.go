@@ -215,6 +215,8 @@ func (a API) Replay(
 		}
 	}
 
+	transforms.Add(minimizeViewport(ctx))
+
 	if wire != nil {
 		transforms.Add(wire)
 	}
