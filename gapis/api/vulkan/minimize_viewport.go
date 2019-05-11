@@ -28,6 +28,9 @@ func minimizeViewport(ctx context.Context) transform.Transformer {
 	return transform.Transform("Minimize viewport", func(ctx context.Context,
 		id api.CmdID, cmd api.Cmd, out transform.Writer) {
 
+		const width = 1
+		const height = 1
+
 		s := out.State()
 		l := s.MemoryLayout
 		cb := CommandBuilder{Thread: cmd.Thread(), Arena: s.Arena}
@@ -41,8 +44,8 @@ func minimizeViewport(ctx context.Context) transform.Transformer {
 
 			for i := uint64(0); i < viewportCount; i++ {
 				viewport := oldViewports.Index(i).MustRead(ctx, cmd, s, nil)[0]
-				viewport.SetWidth(1)
-				viewport.SetHeight(1)
+				viewport.SetWidth(width)
+				viewport.SetHeight(height)
 				newViewports[i] = viewport
 			}
 

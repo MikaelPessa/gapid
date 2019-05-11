@@ -26,8 +26,8 @@ import (
 func minimizeViewport(ctx context.Context) transform.Transformer {
 	ctx = log.Enter(ctx, "Minimize viewport")
 
-	const width = 500
-	const height = 500
+	const width = 1
+	const height = 1
 
 	// Per-instance variable.
 	transformApplied := false
@@ -35,10 +35,13 @@ func minimizeViewport(ctx context.Context) transform.Transformer {
 	return transform.Transform("Minimize viewport", func(ctx context.Context,
 		id api.CmdID, cmd api.Cmd, out transform.Writer) {
 
-		cb := CommandBuilder{Thread: cmd.Thread(), Arena: out.State().Arena}
+		s := out.State()
+		cmd.Extras().Observations().ApplyReads(s.Memory.ApplicationPool())
+		cb := CommandBuilder{Thread: cmd.Thread(), Arena: s.Arena}
 		switch cmd := cmd.(type) {
 		case *GlViewport:
 			out.MutateAndWrite(ctx, id, cb.GlViewport(cmd.X(), cmd.Y(), width, height))
+			transformApplied = true
 			return
 		// Context should be properly bound by the first draw call
 		case *GlDrawArrays, *GlDrawArraysIndirect, *GlDrawArraysInstanced,
