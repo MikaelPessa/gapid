@@ -71,7 +71,7 @@ func (r *PerfettoResolvable) Resolve(ctx context.Context) (interface{}, error) {
 				time.Sleep(5 * time.Millisecond)
 			}
 
-			err := pf.Profile(ctx, intent, mgr, hints)
+			err := pf.Profile(ctx, intent, mgr, hints, r.Path.Overrides)
 			h.stopFunc(ctx)
 
 			if err != nil {

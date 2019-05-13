@@ -494,9 +494,18 @@ message Thumbnail {
   bool disable_optimization = 7;
 }
 
+message OverrideConfig {
+  bool viewport_size = 1;
+  bool fragment_shader = 2;
+  bool vertex_count = 3;
+  bool sampling = 4;
+  bool texture_size = 5;
+}
+
 message Perfetto {
   Capture capture = 1;
   perfetto.protos.TraceConfig config = 2;
+  OverrideConfig overrides = 3;
 }
 
 message ResolveConfig {
