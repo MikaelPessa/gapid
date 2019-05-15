@@ -41,6 +41,7 @@ var (
 	_ = replay.QueryFramebufferAttachment(API{})
 	_ = replay.Support(API{})
 	_ = replay.QueryTimestamps(API{})
+	_ = replay.Profiler(API{})
 )
 
 // GetReplayPriority returns a uint32 representing the preference for
@@ -716,6 +717,17 @@ type timestampsConfig struct {
 type timestampsRequest struct {
 }
 
+// uniqueConfig returns a replay.Config that is guaranteed to be unique.
+// Any requests made with a Config returned from uniqueConfig will not be
+// batched with any other request.
+func uniqueConfig() replay.Config {
+	return &struct{}{}
+}
+
+type profileRequest struct {
+	overrides *path.OverrideConfig
+}
+
 func (a API) GetInitialPayload(ctx context.Context,
 	capture *path.Capture,
 	device *device.Instance,
@@ -829,6 +841,7 @@ func (a API) Replay(
 	wire := false
 	doDisplayToSurface := false
 	var overdraw *stencilOverdraw
+	var profile *replay.ProfilePostBack
 
 	for _, rr := range rrs {
 		switch req := rr.Request.(type) {
@@ -913,6 +926,27 @@ func (a API) Replay(
 			if req.displayToSurface {
 				doDisplayToSurface = true
 			}
+		case profileRequest:
+			if profile == nil {
+				profile = &replay.ProfilePostBack{}
+			}
+			profile.Res = append(profile.Res, rr.Result)
+			optimize = false
+			if req.overrides.GetViewportSize() {
+				transforms.Add(minimizeViewport(ctx))
+			}
+			if req.overrides.GetTextureSize() {
+				transforms.Add(minimizeTextures(ctx))
+			}
+			if req.overrides.GetSampling() {
+				transforms.Add(simplifySampling(ctx))
+			}
+			if req.overrides.GetFragmentShader() {
+				transforms.Add(simplifyFragmentShader(ctx))
+			}
+			if req.overrides.GetVertexCount() {
+				transforms.Add(setVertexCountToOne(ctx))
+			}
 		}
 	}
 
@@ -940,6 +974,8 @@ func (a API) Replay(
 
 	if issues != nil {
 		transforms.Add(issues) // Issue reporting required.
+	} else if profile != nil {
+		transforms.Add(profile)
 	} else {
 		if timestamps != nil {
 			transforms.Add(timestamps)
@@ -1085,4 +1121,23 @@ func (a API) QueryTimestamps(
 		return nil, nil
 	}
 	return res.([]replay.Timestamp), nil
+}
+
+func (a API) SupportsPerfetto(ctx context.Context, i *device.Instance) bool {
+	os := i.GetConfiguration().GetOS()
+	return os.GetKind() == device.OSKind_Android && os.GetAPIVersion() >= 28
+}
+
+func (a API) Profile(
+	ctx context.Context,
+	intent replay.Intent,
+	mgr replay.Manager,
+	hints *service.UsageHints,
+	overrides *path.OverrideConfig) error {
+
+	c := uniqueConfig()
+	r := profileRequest{overrides}
+
+	_, err := mgr.Replay(ctx, intent, c, r, a, hints)
+	return err
 }
