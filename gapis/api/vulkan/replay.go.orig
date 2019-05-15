@@ -41,7 +41,6 @@ var (
 	_ = replay.QueryFramebufferAttachment(API{})
 	_ = replay.Support(API{})
 	_ = replay.QueryTimestamps(API{})
-	_ = replay.Profiler(API{})
 )
 
 // GetReplayPriority returns a uint32 representing the preference for
@@ -716,7 +715,15 @@ func uniqueConfig() replay.Config {
 }
 
 type profileRequest struct {
+<<<<<<< HEAD
 	overrides *path.OverrideConfig
+=======
+	minimizeViewport bool,
+	minimizeTextures bool,
+	simplifySampling bool,
+	useConstantColorFragShader bool,
+	setVertexCountToOne bool,
+>>>>>>> 2d696db0... bah
 }
 
 func (a API) GetInitialPayload(ctx context.Context,
@@ -923,21 +930,6 @@ func (a API) Replay(
 			}
 			profile.Res = append(profile.Res, rr.Result)
 			optimize = false
-			if req.overrides.ViewportSize {
-				transforms.Add(minimizeViewport(ctx))
-			}
-			if req.overrides.TextureSize {
-				transforms.Add(minimizeTextures(ctx))
-			}
-			if req.overrides.Sampling {
-				transforms.Add(simplifySampling(ctx))
-			}
-			if req.overrides.FragmentShader {
-				transforms.Add(simplifyFragmentShader(ctx))
-			}
-			if req.overrides.VertexCount {
-				transforms.Add(setVertexCountToOne(ctx))
-			}
 		}
 	}
 
@@ -967,6 +959,21 @@ func (a API) Replay(
 		transforms.Add(issues) // Issue reporting required.
 	} else if profile != nil {
 		transforms.Add(profile)
+		if (profile.minimizeViewport) {
+			transforms.Add(minimizeViewport(ctx))
+		}
+		if (profile.minimizeTextures) {
+			transforms.Add(minimizeTextures(ctx))
+		}
+		if (profile.simplifySampling) {
+			transforms.Add(simplifySampling(ctx))
+		}
+		if (profile.useConstantColorFragShader) {
+			transforms.Add(simplifyFragmentShader(ctx))
+		}
+		if (profile.setVertexCountToOne) {
+			transforms.Add(setVertexCountToOne(ctx))
+		}
 	} else {
 		if timestamps != nil {
 			transforms.Add(timestamps)
