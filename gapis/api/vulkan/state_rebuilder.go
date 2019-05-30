@@ -2180,7 +2180,7 @@ func (sb *stateBuilder) createRenderPass(rp RenderPassObjectʳ) {
 }
 
 func (sb *stateBuilder) createShaderModule(sm ShaderModuleObjectʳ) {
-	sbExtra := sm.Descriptors().Get().Clone(sb.newState.Arena, api.CloneContext{})
+
 	csm := sb.cb.VkCreateShaderModule(
 		sm.Device(),
 		sb.MustAllocReadData(NewVkShaderModuleCreateInfo(sb.ta,
@@ -2194,7 +2194,10 @@ func (sb *stateBuilder) createShaderModule(sm ShaderModuleObjectʳ) {
 		sb.MustAllocWriteData(sm.VulkanHandle()).Ptr(),
 		VkResult_VK_SUCCESS,
 	)
-	csm.Extras().Add(sbExtra)
+	if !sm.Descriptors().IsNil() {
+		sbExtra := sm.Descriptors().Get().Clone(sb.newState.Arena, api.CloneContext{})
+		csm.Extras().Add(sbExtra)
+	}
 	sb.write(csm)
 }
 
