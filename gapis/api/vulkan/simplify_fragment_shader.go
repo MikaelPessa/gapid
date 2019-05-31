@@ -21,8 +21,6 @@ import (
 	"github.com/google/gapid/core/os/device"
 	"github.com/google/gapid/gapis/api"
 	"github.com/google/gapid/gapis/api/transform"
-	"github.com/google/gapid/gapis/memory"
-	"github.com/google/gapid/gapis/shadertools"
 )
 
 const opEntryPoint uint32 = 15
@@ -55,60 +53,141 @@ func isFragmentShader(ctx context.Context, info VkShaderModuleCreateInfo, l *dev
 	panic("No shader entry point found.")
 }
 
+/*
+func createFragmentShader(ctx context.Context) {
+	shaderSource, _ := shadertools.CompileGlsl(
+		constantColorShader,
+		shadertools.CompileOptions{
+			ShaderType: shadertools.TypeFragment,
+			ClientType: shadertools.Vulkan,
+		},
+	)
+	shaderData := s.AllocDataOrPanic(ctx, shaderSource)
+	defer shaderData.Free()
+
+	createInfo := NewVkShaderModuleCreateInfo(s.Arena,
+		oldCreateInfo.SType(),            // sType
+		oldCreateInfo.PNext(),            // pNext
+		oldCreateInfo.Flags(),            // flags
+		memory.Size(len(shaderSource)*4), // codeSize
+		NewU32ᶜᵖ(shaderData.Ptr()),       // pCode
+	)
+	createInfoData := s.AllocDataOrPanic(ctx, createInfo)
+	defer createInfoData.Free()
+
+	newCmd := cb.VkCreateShaderModule(
+		cmd.Device(),
+		createInfoData.Ptr(),
+		cmd.PAllocator(),
+		cmd.PShaderModule(),
+		VkResult_VK_SUCCESS,
+	).AddRead(
+		createInfoData.Data(),
+	).AddRead(
+		shaderData.Data(),
+	)
+
+	for _, w := range cmd.extras.Observations().Writes {
+		newCmd.AddWrite(w.Range, w.ID)
+	}
+}*/
+
 // simplifyFragmentShader returns a transform that replaces fragment shaders with a constant color shader
 func simplifyFragmentShader(ctx context.Context) transform.Transformer {
 	ctx = log.Enter(ctx, "simplifyFragmentShader")
 	return transform.Transform("simplifyFragmentShader", func(ctx context.Context,
 		id api.CmdID, cmd api.Cmd, out transform.Writer) {
+		/*
+			s := out.State()
+			l := s.MemoryLayout
+			cb := CommandBuilder{Thread: cmd.Thread(), Arena: s.Arena}
+			switch cmd := cmd.(type) {
+				case *VkCreateShaderModule:
+					oldCreateInfo := cmd.PCreateInfo().MustRead(ctx, cmd, s, nil)
+					if isFragmentShader(ctx, oldCreateInfo, l, s) {
+						shaderSource, _ := shadertools.CompileGlsl(
+							constantColorShader,
+							shadertools.CompileOptions{
+								ShaderType: shadertools.TypeFragment,
+								ClientType: shadertools.Vulkan,
+							},
+						)
+						shaderData := s.AllocDataOrPanic(ctx, shaderSource)
+						defer shaderData.Free()
 
-		s := out.State()
-		l := s.MemoryLayout
-		cb := CommandBuilder{Thread: cmd.Thread(), Arena: s.Arena}
-		switch cmd := cmd.(type) {
-		case *VkCreateShaderModule:
-			oldCreateInfo := cmd.PCreateInfo().MustRead(ctx, cmd, s, nil)
-			if isFragmentShader(ctx, oldCreateInfo, l, s) {
-				shaderSource, _ := shadertools.CompileGlsl(
-					constantColorShader,
-					shadertools.CompileOptions{
-						ShaderType: shadertools.TypeFragment,
-						ClientType: shadertools.Vulkan,
-					},
-				)
-				shaderData := s.AllocDataOrPanic(ctx, shaderSource)
-				defer shaderData.Free()
+						createInfo := NewVkShaderModuleCreateInfo(s.Arena,
+							oldCreateInfo.SType(),            // sType
+							oldCreateInfo.PNext(),            // pNext
+							oldCreateInfo.Flags(),            // flags
+							memory.Size(len(shaderSource)*4), // codeSize
+							NewU32ᶜᵖ(shaderData.Ptr()),       // pCode
+						)
+						createInfoData := s.AllocDataOrPanic(ctx, createInfo)
+						defer createInfoData.Free()
 
-				createInfo := NewVkShaderModuleCreateInfo(s.Arena,
-					oldCreateInfo.SType(),            // sType
-					oldCreateInfo.PNext(),            // pNext
-					oldCreateInfo.Flags(),            // flags
-					memory.Size(len(shaderSource)*4), // codeSize
-					NewU32ᶜᵖ(shaderData.Ptr()),       // pCode
-				)
-				createInfoData := s.AllocDataOrPanic(ctx, createInfo)
-				defer createInfoData.Free()
+						newCmd := cb.VkCreateShaderModule(
+							cmd.Device(),
+							createInfoData.Ptr(),
+							cmd.PAllocator(),
+							cmd.PShaderModule(),
+							VkResult_VK_SUCCESS,
+						).AddRead(
+							createInfoData.Data(),
+						).AddRead(
+							shaderData.Data(),
+						)
 
-				newCmd := cb.VkCreateShaderModule(
-					cmd.Device(),
-					createInfoData.Ptr(),
-					cmd.PAllocator(),
-					cmd.PShaderModule(),
-					VkResult_VK_SUCCESS,
-				).AddRead(
-					createInfoData.Data(),
-				).AddRead(
-					shaderData.Data(),
-				)
+						for _, w := range cmd.extras.Observations().Writes {
+							newCmd.AddWrite(w.Range, w.ID)
+						}
+						out.MutateAndWrite(ctx, id, newCmd)
+					} else {
+						out.MutateAndWrite(ctx, id, cmd)
+					}*/
+		/*
+				case *VkCreateGraphicsPipelines:
+					graphicsPipelineCreateInfo := cmd.PCreateInfos().MustRead(ctx, cmd, s, nil)
+					stageCount := uint64(graphicsPipelineCreateInfo.StageCount())
+					shaderStageStateCreateInfos := graphicsPipelineCreateInfo.PStages().Slice(0, stageCount, l)
+					for i := uint64(0); i < stageCount; i++ {
+						shaderStageStateCreateInfo := shaderStageStateCreateInfos.Index(i).MustRead(ctx, cmd, s, nil)[0]
+						if shaderStageStateCreateInfos.Flags() == VkShaderStageFlagBits_VK_SHADER_STAGE_FRAGMENT_BIT {
+							shaderStageStateCreateInfos[i] = constantColorShaderModule
+						} else {
+							shaderStageStateCreateInfos[i] = shaderStageCreateInfo
+						}
+					}
 
-				for _, w := range cmd.extras.Observations().Writes {
-					newCmd.AddWrite(w.Range, w.ID)
-				}
-				out.MutateAndWrite(ctx, id, newCmd)
-			} else {
+					viewportStateCreateInfo.SetPViewports(NewVkViewportᶜᵖ(newViewportsData.Ptr()))
+					viewportStateCreateInfoData := s.AllocDataOrPanic(ctx, viewportStateCreateInfo)
+					defer viewportStateCreateInfoData.Free()
+
+					infos := cmd.PCreateInfos().MustRead(ctx, cmd, s, nil)
+					infos.SetPViewportState(NewVkPipelineViewportStateCreateInfoᶜᵖ(viewportStateCreateInfoData.Ptr()))
+					infosData := s.AllocDataOrPanic(ctx, infos)
+					defer infosData.Free()
+
+					newCmd := cb.VkCreateGraphicsPipelines(
+						cmd.Device(),
+						cmd.PipelineCache(),
+						cmd.CreateInfoCount(),
+						cmd.PCreateInfos(),
+						cmd.PAllocator(),
+						cmd.PPipelines(),
+						cmd.Result(),
+					)
+
+					for _, r := range cmd.Extras().Observations().Reads {
+						newCmd.AddRead(r.Range, r.ID)
+					}
+
+					for _, w := range cmd.Extras().Observations().Writes {
+						newCmd.AddWrite(w.Range, w.ID)
+					}
+
+					out.MutateAndWrite(ctx, id, newCmd)
+			default:
 				out.MutateAndWrite(ctx, id, cmd)
-			}
-		default:
-			out.MutateAndWrite(ctx, id, cmd)
-		}
+			}*/
 	})
 }

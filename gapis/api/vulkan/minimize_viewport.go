@@ -33,11 +33,88 @@ func minimizeViewport(ctx context.Context) transform.Transformer {
 
 		s := out.State()
 		l := s.MemoryLayout
-		cb := CommandBuilder{Thread: cmd.Thread(), Arena: s.Arena}
-		switch cmd := cmd.(type) {
-		case *VkCmdSetViewport:
-			cmd.Extras().Observations().ApplyReads(s.Memory.ApplicationPool())
+		a := s.Arena
+		cb := CommandBuilder{Thread: cmd.Thread(), Arena: a}
 
+		cmd.Extras().Observations().ApplyReads(s.Memory.ApplicationPool())
+		switch cmd := cmd.(type) {
+		case *VkCreateGraphicsPipelines:
+			createInfoCount := uint64(cmd.CreateInfoCount())
+			createInfos := cmd.PCreateInfos().Slice(0, createInfoCount, l).MustRead(ctx, cmd, s, nil)
+			viewportStateCreateInfosData := make([]api.AllocResult, createInfoCount)
+			viewportDatas := make([]api.AllocResult, 0)
+			scissorDatas := make([]api.AllocResult, 0)
+
+			for i := uint64(0); i < createInfoCount; i++ {
+				viewportStateCreateInfo := createInfos[i].PViewportState().MustRead(ctx, cmd, s, nil)
+
+				viewportCount := uint64(viewportStateCreateInfo.ViewportCount())
+				oldViewports := viewportStateCreateInfo.PViewports().Slice(0, viewportCount, l)
+				newViewports := make([]VkViewport, viewportCount)
+				for j := uint64(0); j < viewportCount; j++ {
+					viewport := oldViewports.Index(j).MustRead(ctx, cmd, s, nil)[0]
+					viewport.SetWidth(width)
+					viewport.SetHeight(height)
+					newViewports[j] = viewport
+				}
+
+				viewportDatas := append(viewportDatas, s.AllocDataOrPanic(ctx, newViewports))
+				defer viewportDatas[i].Free()
+
+				scissorCount := uint64(viewportStateCreateInfo.ScissorCount())
+				oldScissors := viewportStateCreateInfo.PScissors().Slice(0, scissorCount, l)
+				newScissors := make([]VkRect2D, scissorCount)
+				for j := uint64(0); j < scissorCount; j++ {
+					scissor := oldScissors.Index(j).MustRead(ctx, cmd, s, nil)[0]
+					scissor.SetOffset(NewVkOffset2D(a, 0, 0))
+					scissor.SetExtent(NewVkExtent2D(a, width, height))
+					newScissors[j] = scissor
+				}
+
+				scissorDatas := append(scissorDatas, s.AllocDataOrPanic(ctx, newScissors))
+				defer scissorDatas[i].Free()
+
+				viewportStateCreateInfo.SetPViewports(NewVkViewportᶜᵖ(viewportDatas[i].Ptr()))
+				viewportStateCreateInfo.SetPScissors(NewVkRect2Dᶜᵖ(scissorDatas[i].Ptr()))
+				viewportStateCreateInfosData[i] = s.AllocDataOrPanic(ctx, viewportStateCreateInfo)
+				defer viewportStateCreateInfosData[i].Free()
+
+				createInfos[i].SetPViewportState(NewVkPipelineViewportStateCreateInfoᶜᵖ(viewportStateCreateInfosData[i].Ptr()))
+			}
+
+			createInfosData := s.AllocDataOrPanic(ctx, createInfos)
+			defer createInfosData.Free()
+
+			newCmd := cb.VkCreateGraphicsPipelines(
+				cmd.Device(),
+				cmd.PipelineCache(),
+				cmd.CreateInfoCount(),
+				createInfosData.Ptr(),
+				cmd.PAllocator(),
+				cmd.PPipelines(),
+				cmd.Result(),
+			).AddRead(
+				createInfosData.Data(),
+			)
+
+			for _, vd := range viewportDatas {
+				newCmd.AddRead(vd.Data())
+			}
+			for _, sd := range scissorDatas {
+				newCmd.AddRead(sd.Data())
+			}
+			for _, vps := range viewportStateCreateInfosData {
+				newCmd.AddRead(vps.Data())
+			}
+			for _, r := range cmd.Extras().Observations().Reads {
+				newCmd.AddRead(r.Range, r.ID)
+			}
+			for _, w := range cmd.Extras().Observations().Writes {
+				newCmd.AddWrite(w.Range, w.ID)
+			}
+
+			out.MutateAndWrite(ctx, id, newCmd)
+		case *VkCmdSetViewport:
 			viewportCount := uint64(cmd.viewportCount)
 			oldViewports := cmd.PViewports().Slice(0, viewportCount, l)
 			newViewports := make([]VkViewport, viewportCount)
@@ -60,6 +137,27 @@ func minimizeViewport(ctx context.Context) transform.Transformer {
 			for _, w := range cmd.Extras().Observations().Writes {
 				newCmd.AddWrite(w.Range, w.ID)
 			}
+			out.MutateAndWrite(ctx, id, newCmd)
+		case *VkCmdSetScissor:
+			scissorCount := uint64(cmd.scissorCount)
+			newScissors := make([]VkRect2D, scissorCount)
+
+			for i := uint64(0); i < scissorCount; i++ {
+				newScissors[i] = NewVkRect2D(a,
+					NewVkOffset2D(a, 0, 0),
+					NewVkExtent2D(a, width, height),
+				)
+			}
+
+			newScissorsData := s.AllocDataOrPanic(ctx, newScissors)
+			defer newScissorsData.Free()
+
+			newCmd := cb.VkCmdSetScissor(cmd.commandBuffer,
+				cmd.FirstScissor(),
+				uint32(scissorCount),
+				newScissorsData.Ptr(),
+			).AddRead(newScissorsData.Data())
+
 			out.MutateAndWrite(ctx, id, newCmd)
 		default:
 			out.MutateAndWrite(ctx, id, cmd)

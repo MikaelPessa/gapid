@@ -935,6 +935,8 @@ func (a API) Replay(
 		}
 	}
 
+	transforms.Add(minimizeViewport(ctx))
+
 	_, err = expandCommands(optimize)
 	if err != nil {
 		return err

@@ -18,7 +18,6 @@ import (
 	"context"
 
 	"github.com/google/gapid/core/log"
-	"github.com/google/gapid/core/math/u32"
 	"github.com/google/gapid/gapis/api"
 	"github.com/google/gapid/gapis/api/transform"
 )
@@ -32,10 +31,11 @@ func minimizeTextures(ctx context.Context) transform.Transformer {
 		const newTexWidth = 1
 		const newTexHeight = 1
 		const newTexDepth = 1
-		const regionCount = 1
 
 		s := out.State()
-		cb := CommandBuilder{Thread: cmd.Thread(), Arena: s.Arena}
+		a := s.Arena
+		l := s.MemoryLayout
+		cb := CommandBuilder{Thread: cmd.Thread(), Arena: a}
 		cmd.Extras().Observations().ApplyReads(s.Memory.ApplicationPool())
 		switch cmd := cmd.(type) {
 		case *VkCreateImage:
@@ -45,7 +45,8 @@ func minimizeTextures(ctx context.Context) transform.Transformer {
 				break
 			}
 
-			imageCreateInfo.SetExtent(NewVkExtent3D(s.Arena, newTexWidth, newTexHeight, newTexDepth))
+			imageCreateInfo.SetExtent(NewVkExtent3D(a, newTexWidth, newTexHeight, newTexDepth))
+			imageCreateInfo.SetMipLevels(1)
 
 			imageCreateInfoData := s.AllocDataOrPanic(ctx, imageCreateInfo)
 			defer imageCreateInfoData.Free()
@@ -63,14 +64,13 @@ func minimizeTextures(ctx context.Context) transform.Transformer {
 			}
 			out.MutateAndWrite(ctx, id, newCmd)
 		case *VkCmdCopyBufferToImage:
-			bufferImageCopy := cmd.PRegions().MustRead(ctx, cmd, s, nil)
-			bufferImageCopy.SetImageOffset(NewVkOffset3D(s.Arena, 0, 0, 0))
-			imageExtent := bufferImageCopy.ImageExtent()
-			width := u32.Min(imageExtent.Width(), newTexWidth)
-			height := u32.Min(imageExtent.Height(), newTexHeight)
-			depth := u32.Min(imageExtent.Depth(), newTexDepth)
+			bufferImageCopy := cmd.PRegions().Slice(0, 1, l).MustRead(ctx, cmd, s, nil)[0]
+			imageSubresource := bufferImageCopy.ImageSubresource()
+			imageSubresource.SetMipLevel(0)
+			bufferImageCopy.SetImageSubresource(imageSubresource)
+			bufferImageCopy.SetImageExtent(NewVkExtent3D(a, newTexWidth, newTexHeight, newTexDepth))
+			bufferImageCopy.SetImageOffset(NewVkOffset3D(a, 0, 0, 0))
 
-			bufferImageCopy.SetImageExtent(NewVkExtent3D(s.Arena, width, height, depth))
 			bufferImageCopyData := s.AllocDataOrPanic(ctx, bufferImageCopy)
 			defer bufferImageCopyData.Free()
 
@@ -79,20 +79,19 @@ func minimizeTextures(ctx context.Context) transform.Transformer {
 				cmd.srcBuffer,
 				cmd.dstImage,
 				cmd.dstImageLayout,
-				regionCount,
+				1, // regionCount
 				bufferImageCopyData.Ptr(),
 			).AddRead(bufferImageCopyData.Data())
 
 			out.MutateAndWrite(ctx, id, newCmd)
 		case *VkCmdCopyImageToBuffer:
-			bufferImageCopy := cmd.PRegions().MustRead(ctx, cmd, s, nil)
-			bufferImageCopy.SetImageOffset(NewVkOffset3D(s.Arena, 0, 0, 0))
-			imageExtent := bufferImageCopy.ImageExtent()
-			width := u32.Min(imageExtent.Width(), newTexWidth)
-			height := u32.Min(imageExtent.Height(), newTexHeight)
-			depth := u32.Min(imageExtent.Depth(), newTexDepth)
+			bufferImageCopy := cmd.PRegions().Slice(0, 1, l).MustRead(ctx, cmd, s, nil)[0]
+			imageSubresource := bufferImageCopy.ImageSubresource()
+			imageSubresource.SetMipLevel(0)
+			bufferImageCopy.SetImageSubresource(imageSubresource)
+			bufferImageCopy.SetImageExtent(NewVkExtent3D(a, newTexWidth, newTexHeight, newTexDepth))
+			bufferImageCopy.SetImageOffset(NewVkOffset3D(a, 0, 0, 0))
 
-			bufferImageCopy.SetImageExtent(NewVkExtent3D(s.Arena, width, height, depth))
 			bufferImageCopyData := s.AllocDataOrPanic(ctx, bufferImageCopy)
 			defer bufferImageCopyData.Free()
 
@@ -101,9 +100,83 @@ func minimizeTextures(ctx context.Context) transform.Transformer {
 				cmd.srcImage,
 				cmd.srcImageLayout,
 				cmd.dstBuffer,
-				regionCount,
+				1, // regionCount
 				bufferImageCopyData.Ptr(),
 			).AddRead(bufferImageCopyData.Data())
+
+			out.MutateAndWrite(ctx, id, newCmd)
+		case *VkCmdBlitImage:
+			oldImageBlit := cmd.PRegions().MustRead(ctx, cmd, s, nil)
+			srcSubresource := oldImageBlit.SrcSubresource()
+			srcSubresource.SetMipLevel(0)
+			dstSubresource := oldImageBlit.DstSubresource()
+			dstSubresource.SetMipLevel(0)
+
+			newImageBlit := NewVkImageBlit(a,
+				srcSubresource,
+				NewVkOffset3Dː2ᵃ(a, // srcOffsets (Bounds)
+					NewVkOffset3D(a, 0, 0, 0),
+					NewVkOffset3D(a, newTexWidth, newTexHeight, newTexDepth),
+				),
+				dstSubresource,
+				NewVkOffset3Dː2ᵃ(a, // dstOffsets (Bounds)
+					NewVkOffset3D(a, 0, 0, 0),
+					NewVkOffset3D(a, newTexWidth, newTexHeight, newTexDepth),
+				),
+			)
+			imageBlitData := s.AllocDataOrPanic(ctx, newImageBlit)
+			defer imageBlitData.Free()
+
+			newCmd := cb.VkCmdBlitImage(
+				cmd.commandBuffer,
+				cmd.srcImage,
+				cmd.srcImageLayout,
+				cmd.dstImage,
+				cmd.dstImageLayout,
+				1, // regionCount
+				imageBlitData.Ptr(),
+				cmd.filter,
+			).AddRead(imageBlitData.Data())
+
+			out.MutateAndWrite(ctx, id, newCmd)
+		case *VkCreateImageView:
+			imageViewCreateInfo := cmd.PCreateInfo().MustRead(ctx, cmd, s, nil)
+			subresourceRange := imageViewCreateInfo.SubresourceRange()
+			subresourceRange.SetBaseMipLevel(0)
+			subresourceRange.SetLevelCount(1)
+
+			imageViewCreateInfo.SetSubresourceRange(subresourceRange)
+			imageViewCreateInfoData := s.AllocDataOrPanic(ctx, imageViewCreateInfo)
+			defer imageViewCreateInfoData.Free()
+
+			newCmd := cb.VkCreateImageView(
+				cmd.device,
+				imageViewCreateInfoData.Ptr(),
+				cmd.PAllocator(),
+				cmd.PView(),
+				VkResult_VK_SUCCESS,
+			).AddRead(imageViewCreateInfoData.Data())
+
+			for _, w := range cmd.Extras().Observations().Writes {
+				newCmd.AddWrite(w.Range, w.ID)
+			}
+
+			out.MutateAndWrite(ctx, id, newCmd)
+		case *VkCmdClearColorImage:
+			subresourceRanges := cmd.PRanges().MustRead(ctx, cmd, s, nil)
+			subresourceRanges.SetBaseMipLevel(0)
+			subresourceRanges.SetLevelCount(1)
+			subresourceRangesData := s.AllocDataOrPanic(ctx, subresourceRanges)
+			defer subresourceRangesData.Free()
+
+			newCmd := cb.VkCmdClearColorImage(
+				cmd.commandBuffer,
+				cmd.image,
+				cmd.imageLayout,
+				cmd.pColor,
+				1, // rangeCount
+				subresourceRangesData.Ptr(),
+			).AddRead(subresourceRangesData.Data())
 
 			out.MutateAndWrite(ctx, id, newCmd)
 		default:
