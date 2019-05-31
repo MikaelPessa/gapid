@@ -169,7 +169,7 @@ func (a API) Replay(
 		log.E(ctx, "%v: %v - %v", id, cmd, err)
 	}
 
-	var profile *replay.ProfilePostBack
+	var profile *replay.EndOfReplay
 
 	for _, rr := range rrs {
 		switch req := rr.Request.(type) {
@@ -178,7 +178,7 @@ func (a API) Replay(
 			if issues == nil {
 				issues = newFindIssues(ctx, capture, device)
 			}
-			issues.reportTo(rr.Result)
+			issues.AddResult(rr.Result)
 			onCompatError = func(ctx context.Context, id api.CmdID, cmd api.Cmd, err error) {
 				issues.onIssue(cmd, id, service.Severity_ErrorLevel, err)
 			}
@@ -223,9 +223,9 @@ func (a API) Replay(
 
 		case profileRequest:
 			if profile == nil {
-				profile = &replay.ProfilePostBack{}
+				profile = &replay.EndOfReplay{}
 			}
-			profile.Res = append(profile.Res, rr.Result)
+			profile.AddResult(rr.Result)
 		}
 	}
 
@@ -249,7 +249,7 @@ func (a API) Replay(
 	}
 
 	if profile != nil {
-		// Don't use DCE. TODO: should we?
+		// Don't use DCE.
 		transforms = transform.Transforms{profile}
 	}
 
@@ -350,11 +350,6 @@ func (a API) QueryFramebufferAttachment(
 		return nil, err
 	}
 	return res.(*image.Data), nil
-}
-
-func (a API) SupportsPerfetto(ctx context.Context, i *device.Instance) bool {
-	os := i.GetConfiguration().GetOS()
-	return os.GetKind() == device.OSKind_Android && os.GetAPIVersion() >= 28
 }
 
 func (a API) Profile(

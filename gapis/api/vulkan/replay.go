@@ -841,7 +841,7 @@ func (a API) Replay(
 	wire := false
 	doDisplayToSurface := false
 	var overdraw *stencilOverdraw
-	var profile *replay.ProfilePostBack
+	var profile *replay.EndOfReplay
 
 	for _, rr := range rrs {
 		switch req := rr.Request.(type) {
@@ -853,7 +853,7 @@ func (a API) Replay(
 				}
 				issues = newFindIssues(ctx, c, n)
 			}
-			issues.reportTo(rr.Result)
+			issues.AddResult(rr.Result)
 			optimize = false
 			if req.displayToSurface {
 				doDisplayToSurface = true
@@ -928,25 +928,10 @@ func (a API) Replay(
 			}
 		case profileRequest:
 			if profile == nil {
-				profile = &replay.ProfilePostBack{}
+				profile = &replay.EndOfReplay{}
 			}
-			profile.Res = append(profile.Res, rr.Result)
+			profile.AddResult(rr.Result)
 			optimize = false
-			if req.overrides.GetViewportSize() {
-				transforms.Add(minimizeViewport(ctx))
-			}
-			if req.overrides.GetTextureSize() {
-				transforms.Add(minimizeTextures(ctx))
-			}
-			if req.overrides.GetSampling() {
-				transforms.Add(simplifySampling(ctx))
-			}
-			if req.overrides.GetFragmentShader() {
-				transforms.Add(simplifyFragmentShader(ctx))
-			}
-			if req.overrides.GetVertexCount() {
-				transforms.Add(setVertexCountToOne(ctx))
-			}
 		}
 	}
 
@@ -1121,11 +1106,6 @@ func (a API) QueryTimestamps(
 		return nil, nil
 	}
 	return res.([]replay.Timestamp), nil
-}
-
-func (a API) SupportsPerfetto(ctx context.Context, i *device.Instance) bool {
-	os := i.GetConfiguration().GetOS()
-	return os.GetKind() == device.OSKind_Android && os.GetAPIVersion() >= 28
 }
 
 func (a API) Profile(

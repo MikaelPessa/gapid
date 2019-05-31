@@ -81,9 +81,6 @@ type QueryFramebufferAttachment interface {
 // Profiler is the interface implemented by replays that can be performed
 // in a profiling mode while capturing profiling data.
 type Profiler interface {
-	// SupportsPerfetto returns whether the given device can perform a Perffeto
-	// capture during a profiling replay.
-	SupportsPerfetto(context.Context, *device.Instance) bool
 	// Profile execute a profilable replay.
 	Profile(
 		ctx context.Context,

@@ -111,29 +111,14 @@ cmd VkResult vkCreateSwapchainKHR(
   if !(device in Devices) { vkErrorInvalidDevice(device) }
   if pCreateInfo == null { vkErrorNullPointer("VkSwapchainCreateInfoKHR") }
   create_info := pCreateInfo[0]
-  if create_info.pNext != null {
-    numPNext := numberOfPNext(create_info.pNext)
-    next := MutableVoidPtr(as!void*(create_info.pNext))
-    for i in (0 .. numPNext) {
-      sType := as!const VkStructureType*(next.Ptr)[0:1][0]
-      switch sType {
-        case VK_STRUCTURE_TYPE_VIRTUAL_SWAPCHAIN_PNEXT: {
-          ext := as!VirtualSwapchainPNext*(next.Ptr)[0:1][0]
-          if ext.surfaceCreateInfo != null {
-            _ = as!VkStructureType*(ext.surfaceCreateInfo)[0:1][0]
-          }
-        }
-      }
-      next.Ptr = as!VulkanStructHeader*(next.Ptr)[0:1][0].PNext
-    }
-  }
+ 
   queueFamilyIndices := create_info.pQueueFamilyIndices[0:create_info.queueFamilyIndexCount]
 
   swapchainObject := new!SwapchainObject(Device: device,
     Info:                   ImageInfo(
       ImageType:    VK_IMAGE_TYPE_2D,
       Format:       create_info.imageFormat,
-      Extent:       VkExtent3D(create_info.imageExtent.Width, create_info.imageExtent.Height, 1),
+      Extent:       VkExtent3D(create_info.imageExtent.width, create_info.imageExtent.height, 1),
       MipLevels:    1,
       ArrayLayers:  create_info.imageArrayLayers,
       Samples:      VK_SAMPLE_COUNT_1_BIT,
@@ -153,6 +138,34 @@ cmd VkResult vkCreateSwapchainKHR(
   for i in (0 .. create_info.queueFamilyIndexCount) {
     swapchainObject.Info.QueueFamilyIndices[i] =
     queueFamilyIndices[i]
+  }
+
+   if create_info.pNext != null {
+    numPNext := numberOfPNext(create_info.pNext)
+    next := MutableVoidPtr(as!void*(create_info.pNext))
+    for i in (0 .. numPNext) {
+      sType := as!const VkStructureType*(next.Ptr)[0:1][0]
+      switch sType {
+        case VK_STRUCTURE_TYPE_VIRTUAL_SWAPCHAIN_PNEXT: {
+          ext := as!VirtualSwapchainPNext*(next.Ptr)[0:1][0]
+          if ext.surfaceCreateInfo != null {
+            _ = as!VkStructureType*(ext.surfaceCreateInfo)[0:1][0]
+          }
+        }
+        case VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO_KHR: {
+           ext := as!VkImageFormatListCreateInfoKHR*(next.Ptr)[0]
+           ifl := new!ImageFormatList()
+           if (ext.viewFormatCount > 0) {
+            formats := ext.pViewFormats[0:ext.viewFormatCount]
+            for j in (0 .. ext.viewFormatCount) {
+              ifl.viewFormats[j] = formats[j]
+            }
+           }
+           swapchainObject.Info.ViewFormatList = ifl
+        }
+      }
+      next.Ptr = as!VulkanStructHeader*(next.Ptr)[0:1][0].PNext
+    }
   }
 
   handle := ?
@@ -214,8 +227,8 @@ cmd VkResult vkGetSwapchainImagesKHR(
           ImageAspect:        as!VkImageAspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
         )
         object.IsSwapchainImage = true
-        width := swapchainObject.Info.Extent.Width
-        height := swapchainObject.Info.Extent.Height
+        width := swapchainObject.Info.Extent.width
+        height := swapchainObject.Info.Extent.height
         format := swapchainObject.Info.Format
         layer := new!ImageLayer()
         level := new!ImageLevel(Width: width,Height:  height,Depth:  1,Layout:  VK_IMAGE_LAYOUT_UNDEFINED)

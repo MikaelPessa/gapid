@@ -23,6 +23,7 @@ go_library(
         "context.go",
         "custom.go",
         "doc.go",
+        "end_of_replay.go",
         "events.go",
         "executor.go",
         "export_replay.go",

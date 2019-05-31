@@ -54,6 +54,7 @@
   map!(u32, u32)                                 QueueFamilyIndices
   VkImageLayout                                  InitialLayout
   ref!DedicatedAllocationBufferImageCreateInfoNV DedicatedAllocationNV
+  ref!ImageFormatList                            ViewFormatList
 }
 
 @resource
@@ -197,6 +198,17 @@ cmd VkResult vkCreateImage(
             DedicatedAllocation: ext.dedicatedAllocation
           )
         }
+        case VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO_KHR: {
+           ext := as!VkImageFormatListCreateInfoKHR*(next.Ptr)[0]
+           ifl := new!ImageFormatList()
+           if (ext.viewFormatCount > 0) {
+            formats := ext.pViewFormats[0:ext.viewFormatCount]
+            for j in (0 .. ext.viewFormatCount) {
+              ifl.viewFormats[j] = formats[j]
+            }
+           }
+           imageInfo.ViewFormatList = ifl
+        }
       }
       next.Ptr = as!VulkanStructHeader*(next.Ptr)[0:1][0].PNext
     }
@@ -220,9 +232,9 @@ cmd VkResult vkCreateImage(
     for j in (0 .. info.arrayLayers) {
       aspect.Layers[j] = new!ImageLayer()
       for i in (0 .. info.mipLevels) {
-        width := getMipSize(info.extent.Width, i) / divisor.Width
-        height := getMipSize(info.extent.Height, i) / divisor.Height
-        depth := getMipSize(info.extent.Depth, i)
+        width := getMipSize(info.extent.width, i) / divisor.Width
+        height := getMipSize(info.extent.height, i) / divisor.Height
+        depth := getMipSize(info.extent.depth, i)
         level := new!ImageLevel(
           Width: width,
           Height:  height,
