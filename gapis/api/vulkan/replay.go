@@ -935,7 +935,7 @@ func (a API) Replay(
 		}
 	}
 
-	transforms.Add(minimizeViewport(ctx))
+	transforms.Add(simplifyFragmentShader(ctx))
 
 	_, err = expandCommands(optimize)
 	if err != nil {
